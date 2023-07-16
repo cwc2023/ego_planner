@@ -1,0 +1,35 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/cwc/catkin_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/planner/bspline_opt/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/planner/drone_detect/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/planner/plan_manage/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/uav_simulator/mockamap/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/uav_simulator/Utils/multi_map_server/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/planner/path_searching/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/planner/plan_env/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/uav_simulator/Utils/pose_utils/include/**",
+        "/home/cwc/catkin_ws/src/px4ctrl/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/uav_simulator/Utils/quadrotor_msgs/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/uav_simulator/so3_control/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/uav_simulator/so3_quadrotor_simulator/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/planner/traj_utils/include/**",
+        "/home/cwc/catkin_ws/src/ego-planner-swarm/src/uav_simulator/Utils/uav_utils/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
