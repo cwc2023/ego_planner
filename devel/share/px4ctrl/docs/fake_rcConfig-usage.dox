@@ -1,0 +1,11 @@
+\subsubsection usage Usage
+\verbatim
+<node name="px4ctrl" pkg="px4ctrl" type="px4ctrl">
+  <param name="cmd_int" type="int" value="0" />
+  <param name="mode_int" type="int" value="0" />
+  <param name="cmd_bool" type="bool" value="False" />
+  <param name="mode_bool" type="bool" value="False" />
+  <param name="size" type="int" value="1" />
+</node>
+\endverbatim
+

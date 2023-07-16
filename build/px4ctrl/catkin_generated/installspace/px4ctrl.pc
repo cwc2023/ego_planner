@@ -1,0 +1,8 @@
+prefix=/home/cwc/ego_planner/install
+
+Name: px4ctrl
+Description: Description of px4ctrl
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib -lpx4ctrl
+Requires: dynamic_reconfigure quadrotor_msgs roscpp rospy geometry_msgs sensor_msgs mavros_msgs

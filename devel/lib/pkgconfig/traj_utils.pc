@@ -1,0 +1,8 @@
+prefix=/home/cwc/ego_planner/devel
+
+Name: traj_utils
+Description: Description of traj_utils
+Version: 0.0.0
+Cflags: -I/home/cwc/ego_planner/devel/include -I/home/cwc/ego_planner/src/ego-planner-swarm/src/planner/traj_utils/include
+Libs: -L${prefix}/lib -ltraj_utils
+Requires: message_runtime
