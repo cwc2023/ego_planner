@@ -65,6 +65,18 @@ int main(int argc, char *argv[])
         nh.subscribe<mavros_msgs::State>("mavros/state",
                                          10,
                                          boost::bind(&State_Data_t::feed, &fsm.state_data, _1));
+    /*ros::Subscriber state_sub = 1. 声明了一个ros:: Subcriber的变量state_sub */
+    /*   nh.subscribe<mavros_msgs::State>("mavros/state",
+                                         10,
+                                         boost::bind(&State_Data_t::feed, &fsm.state_data, _1));
+    这里是订阅的主题函数 有三个参数
+    1. mavros/state 是主题的名称， 这个主题的消息类型是 mavros_msgs::State
+    2. 10 是队列的大小，如果处理的速度不够快，那么队列会被填满，后面的消息会被丢弃
+    3. boost::bind(&State_Data_t::feed, &fsm.state_data, _1) 是回调函数，当有消息到达时，会调用这个函数
+    这里使用了boost::bind将类fsm的成员函数 State_Data_t::feed 和对象&fsm.state_date 绑定在一起，_1是一个占位符，表示回调函数的参数
+    总的来说，这段代码的作用是当 mavros/state 主题有新的mavros_msga::State 类型的消息发布时，就会
+    调用fsm的成员函数State_Data_t::feed，将这个消息作为参数传递给这个函数
+     */                                   
 
     ros::Subscriber extended_state_sub =
         nh.subscribe<mavros_msgs::ExtendedState>("mavros/extended_state",
