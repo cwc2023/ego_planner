@@ -45,7 +45,7 @@
         <arg name="flight_type" value="1" />
         <!-- global waypoints -->
         <!-- It generates a piecewise min-snap traj passing all waypoints -->
-        <arg name="point_num" value="1" />
+        <arg name="point_num" value="1" /> <!-- number of waypoints 设置的点的数量 对应ego_replan_fsm.cpp中33到38行代码-->
         <arg name="point0_x" value="12" />
         <arg name="point0_y" value="1" />
         <arg name="point0_z" value="1.5" />

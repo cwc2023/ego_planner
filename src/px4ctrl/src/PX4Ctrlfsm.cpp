@@ -13,7 +13,7 @@ PX4CtrlFSM::PX4CtrlFSM(Parameter_t &param_, LinearControl &controller_) : param(
 
 /*四旋翼无人机（quadrotor drone）的控制状态机，包含五个主要的状态：
 MANUAL_CTRL，AUTO_HOVER，CMD_CTRL，AUTO_TAKEOFF，AUTO_LAND。
-手动控制，    自动悬停，    命令控制，自动起飞和       自动降落。*/
+手动控制，    自动盘旋，    命令控制，自动起飞和       自动降落。*/
 
 /* 
         Finite State Machine
@@ -48,7 +48,7 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
     SO3_Controller_Output_t u_so3;
     Desired_State_t des(odom_data);
     bool rotor_low_speed_during_land = false;
-
+    //首先判断是否有遥控器
     if(param.takeoff_land.no_RC) {
         rc_dy_data.enter_command_mode = dy_data.enter_command_mode;
         rc_dy_data.enter_hover_mode = dy_data.enter_hover_mode;
@@ -68,7 +68,7 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
     {
     case MANUAL_CTRL:
     {
-        if (rc_dy_data.enter_hover_mode) // Try to jump to AUTO_HOVER
+        if (rc_dy_data.enter_hover_mode) // Try to jump to AUTO_HOVER  遥控器映射到那个和状态
         {
             if (!odom_is_received(now_time)) {
 
@@ -89,7 +89,7 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
             state = AUTO_HOVER;
             controller.resetThrustMapping();    //g/percent_hover
             set_hov_with_odom();
-            toggle_offboard_mode(true);         // 进入offboard模式
+            toggle_offboard_mode(true);         // 进入offboard模式 只有在offboard下无人机可自主飞行
 
             ROS_INFO("\033[32m[px4ctrl] MANUAL_CTRL(L1) --> AUTO_HOVER(L2)\033[32m");
         }
@@ -160,7 +160,7 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
         break;
     }
 
-    case AUTO_HOVER:
+    case AUTO_HOVER: //在自动盘旋状态下
     {
         if (!rc_dy_data.is_hover_mode || !odom_is_received(now_time)) {
 
@@ -169,13 +169,14 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
 
             ROS_WARN("[px4ctrl] AUTO_HOVER(L2) --> MANUAL_CTRL(L1)");
         }
-        // cmd触发接收轨迹
+        // cmd触发接收轨迹          cmd_is_received(now_time) 判断cmd是否触发
          else if (rc_dy_data.is_command_mode && cmd_is_received(now_time)) {
 
-            if (state_data.current_state.mode == "OFFBOARD") {
+            if (state_data.current_state.mode == "OFFBOARD") //判断是否在offboard模式下
+            {
 
-                state = CMD_CTRL;
-                des = get_cmd_des();//后续修改
+                state = CMD_CTRL; //状态会条到CMD_CTRL命令控制模式
+                des = get_cmd_des();//获取cmd控制模式下的期望值
                 ROS_INFO("\033[32m[px4ctrl] AUTO_HOVER(L2) --> CMD_CTRL(L3)\033[32m");
             }
         } else if (takeoff_land_data.triggered && takeoff_land_data.takeoff_land_cmd == quadrotor_msgs::TakeoffLand::LAND) {
@@ -215,12 +216,12 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
 
             state = AUTO_HOVER;
             set_hov_with_odom();
-            des = get_hover_des();
+            des = get_hover_des(); 
             ROS_INFO("[px4ctrl] From CMD_CTRL(L3) to AUTO_HOVER(L2)!");
         } else
         // 满足触发条件
         {
-            des = get_cmd_des();
+            des = get_cmd_des();//得到ego planer发过来的轨迹
         }
 
         if (takeoff_land_data.triggered && takeoff_land_data.takeoff_land_cmd == quadrotor_msgs::TakeoffLand::LAND) {
@@ -301,8 +302,8 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
     default:
         break;
     }
-
-    // STEP2: estimate thrust model
+    //得到ego planner 发过来的轨迹之后 进行控制
+    // STEP2: estimate thrust model  估计推力模型
     if (state == AUTO_HOVER || state == CMD_CTRL) {
 
         // controller.estimateThrustModel(imu_data.a, bat_data.volt, param);
@@ -318,13 +319,14 @@ void PX4CtrlFSM::process() //包含了状态机的主要循环，这些循环包
 
         // controller.calculateControl(des, odom_data, imu_data, u);
         debug_msg = controller.calculateControl(des, odom_data, imu_data, u);   //计算角度
-        debug_msg.header.stamp = now_time;
+        //des ego planner 发过来的轨迹之后  odom_data  里程计信息  imu_data imu的数据
+        debug_msg.header.stamp = now_time;      
         if (param.debug) {
             debug_pub.publish(debug_msg);
         }
     }
 
-    // STEP4: publish control commands to mavros
+    // STEP4: publish control commands to mavros 以角度或者角速度的形式发布给px4底层控制
     if (param.use_bodyrate_ctrl) {
 
         publish_bodyrate_ctrl(u, now_time);
@@ -568,7 +570,8 @@ void PX4CtrlFSM::publish_bodyrate_ctrl(const Controller_Output_t &u, const ros::
     msg.header.frame_id = std::string("FCU");
 
     msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ATTITUDE;
-
+    /*消息的type_mask来忽略姿态的控制（IGNORE_ATTITUDE），即该消息只对角速度和推力进行控制，姿态由飞控器自行决定*/
+    
     // msg.body_rate.x = u.bodyrates.x();
     // msg.body_rate.y = u.bodyrates.y();
     // msg.body_rate.z = u.bodyrates.z();
@@ -591,15 +594,19 @@ void PX4CtrlFSM::publish_attitude_ctrl(const Controller_Output_t &u, const ros::
     msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
                     mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
                     mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
+    /*
+    设置消息的type_mask来忽略角速度的控制（IGNORE_ROLL_RATE、IGNORE_PITCH_RATE和IGNORE_YAW_RATE），
+    即该消息只对姿态和推力进行控制，角速度由飞控器自行决定
+    */
 
-    msg.orientation.x = u.q.x();
+    msg.orientation.x = u.q.x();//飞控器输出的四元数姿态赋值给msg.orientation
     msg.orientation.y = u.q.y();
     msg.orientation.z = u.q.z();
     msg.orientation.w = u.q.w();
 
-    msg.thrust = u.thrust;
+    msg.thrust = u.thrust; //将飞控器输出的推力值赋值给msg.thrust。
 
-    ctrl_FCU_pub.publish(msg);
+    ctrl_FCU_pub.publish(msg);//通过ctrl_FCU_pub.publish(msg)将封装好的msg消息发布到ROS话题上
 }
 
 void PX4CtrlFSM::publish_trigger(const nav_msgs::Odometry &odom_msg) {

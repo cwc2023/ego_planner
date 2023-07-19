@@ -2,47 +2,68 @@
 #include <plan_manage/ego_replan_fsm.h>
 
 namespace ego_planner
-{
+{           /*---------------------------------可以通过搜索first second 来进行分步查看----------------------------------------------------*/
 
   void EGOReplanFSM::init(ros::NodeHandle &nh)
   {
-    current_wp_ = 0;
-    exec_state_ = FSM_EXEC_STATE::INIT;
-    have_target_ = false;
-    have_odom_ = false;
-    have_recv_pre_agent_ = false;
+    current_wp_ = 0;//当前的航点（waypoint）编号
+    exec_state_ = FSM_EXEC_STATE::INIT;//FSM初始化
+    have_target_ = false;//当前的目标或目标点
+    have_odom_ = false;//是否接受里程计信息
+    have_recv_pre_agent_ = false;//是否接受到前一个无人机的轨迹
 
     /*  fsm param  */
-    nh.param("fsm/flight_type", target_type_, -1);
-    nh.param("fsm/thresh_replan_time", replan_thresh_, -1.0);
-    nh.param("fsm/thresh_no_replan_meter", no_replan_thresh_, -1.0);
-    nh.param("fsm/planning_horizon", planning_horizen_, -1.0);
-    nh.param("fsm/planning_horizen_time", planning_horizen_time_, -1.0);
-    nh.param("fsm/emergency_time", emergency_time_, 1.0);
-    nh.param("fsm/realworld_experiment", flag_realworld_experiment_, false);
-    nh.param("fsm/fail_safe", enable_fail_safe_, true);
+    /*从ros的参数服务器获取一些参数用于初始化变量 在ROS中，参数服务器允许在节点之间共享参数*/
 
-    have_trigger_ = !flag_realworld_experiment_;
+    nh.param("fsm/flight_type", target_type_, -1); //两种飞行模式，1代表手动选择，2代表硬编码
+    /*nh.param("fsm/flight_type", target_type_, -1);: 尝试从参数服务器获取fsm/flight_type参数的值，
+    并将结果存储在target_type_中。如果获取不到，那么target_type_将被设置为-1。
+    target_type_可能代表某种飞行模式或任务类型*/
+    nh.param("fsm/thresh_replan_time", replan_thresh_, -1.0);//重新规划的阈值时间
+    nh.param("fsm/thresh_no_replan_meter", no_replan_thresh_, -1.0);//无需重新规划的距离阈值。
+    nh.param("fsm/planning_horizon", planning_horizen_, -1.0);//代表规划视野或规划范围
+    nh.param("fsm/planning_horizen_time", planning_horizen_time_, -1.0);//规划视野的时间范围。
+    nh.param("fsm/emergency_time", emergency_time_, 1.0);//紧急情况下的响应时间
+    nh.param("fsm/realworld_experiment", flag_realworld_experiment_, false);//是否在真实世界中进行实验。
+    nh.param("fsm/fail_safe", enable_fail_safe_, true);//是否启用了安全失败措施。
+
+    have_trigger_ = !flag_realworld_experiment_; //如果不在真实世界中进行实验，那么就设定已经触发了某些事件或行为
 
     nh.param("fsm/waypoint_num", waypoint_num_, -1);
     for (int i = 0; i < waypoint_num_; i++)
-    {
+    {  //获取的路径点数量，依次获取每个路径点的x, y, z坐标，并存储在waypoints_这个二维数组中。
       nh.param("fsm/waypoint" + to_string(i) + "_x", waypoints_[i][0], -1.0);
       nh.param("fsm/waypoint" + to_string(i) + "_y", waypoints_[i][1], -1.0);
       nh.param("fsm/waypoint" + to_string(i) + "_z", waypoints_[i][2], -1.0);
-    }
+    } //也就是我们在single_run_in_gazebo.launch有设置的点
 
-    /* initialize main modules */
-    visualization_.reset(new PlanningVisualization(nh));
-    planner_manager_.reset(new EGOPlannerManager);
-    planner_manager_->initPlanModules(nh, visualization_);
-    planner_manager_->deliverTrajToOptimizer(); // store trajectories
-    planner_manager_->setDroneIdtoOpt();
+    /* initialize main modules 初始化模块 */
+    visualization_.reset(new PlanningVisualization(nh));//可视化模块
+    planner_manager_.reset(new EGOPlannerManager);//规划器管理模块  
+/*
+  代码 planner_manager_.reset(new EGOPlannerManager); 是在使用 C++ 的智能指针（具体来说是 unique pointer，也就是独特指针），
+  这是自 C++11 以来的标准库的一部分。此语法创建了一个 EGOPlannerManager 类的新实例，并将其分配给 planner_manager_ 独特指针
+
+1. new EGOPlannerManager: 这是创建一个 EGOPlannerManager 类的新实例。
+      new 是一个关键字，用于为给定类型的对象分配内存，并调用其构造函数进行初始化。
+2. planner_manager_.reset(...): 这是 std::unique_ptr 类提供的一个方法。
+      它会删除当前由独特指针管理的对象（如果有的话），并接管新创建的 EGOPlannerManager 实例的所有权。
+3.使用智能指针的优势在于它可以自动管理 EGOPlannerManager 对象的内存。当 std::unique_ptr （在这个例子中就是 planner_manager_）
+      超出其作用域时，它会自动删除 EGOPlannerManager 对象，防止内存泄漏。
+      这种语法在现代 C++ 中非常常见，因为它在提供高安全级别的同时，几乎不带来额外的开销。
+*/
+    planner_manager_->initPlanModules(nh, visualization_);//初始化规划过程的最大速度以及加速度 a* 相应的信息 根据环境执行特定的路径规划
+  /*initPlanModules 是 EGOPlannerManager 类定义的一个函数 
+    使用 nh 和 visualization_ 这两个参数进行一些初始化的操作。*/
+    planner_manager_->deliverTrajToOptimizer(); // store trajectories 并将轨迹信息传递给优化器
+    planner_manager_->setDroneIdtoOpt();//设置无人机的ID
+
 
     /* callback */
-    exec_timer_ = nh.createTimer(ros::Duration(0.01), &EGOReplanFSM::execFSMCallback, this);
+    exec_timer_ = nh.createTimer(ros::Duration(0.01), &EGOReplanFSM::execFSMCallback, this);//执行状态机的回调execFSMCallback
+    //检查碰撞的回调checkCollisionCallback
     safety_timer_ = nh.createTimer(ros::Duration(0.05), &EGOReplanFSM::checkCollisionCallback, this);
-
+    //订阅odom_world主题，并设置接收到消息后的回调函数为odometryCallback
     odom_sub_ = nh.subscribe("odom_world", 1, &EGOReplanFSM::odometryCallback, this);
 
     if (planner_manager_->pp_.drone_id >= 1)
@@ -154,17 +175,19 @@ namespace ego_planner
     //   ROS_ERROR("Unable to generate global trajectory!");
     // }
   }
-
-  void EGOReplanFSM::planNextWaypoint(const Eigen::Vector3d next_wp)
+  /*--------------------------- first 开始进行规划 -------------------------------------------------------------------------------------*/
+  void EGOReplanFSM::planNextWaypoint(const Eigen::Vector3d next_wp) //next_wp 我们给定的目标点
   {
     bool success = false;
+    /*生成参考轨迹 ，主要是为了生成一条不考虑碰撞的光滑轨迹 */
     success = planner_manager_->planGlobalTraj(odom_pos_, odom_vel_, Eigen::Vector3d::Zero(), next_wp, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+                            // 当前的位置和速度 odom_pos_, odom_vel_
+              /*-----------------*这里是显示插值点 -------------------- */             
+    // visualization_->displayGoalPoint(next_wp, Eigen::Vector4d(0, 0.5, 0.5, 1), 0.3, 0);  
 
-    // visualization_->displayGoalPoint(next_wp, Eigen::Vector4d(0, 0.5, 0.5, 1), 0.3, 0);
-
-    if (success)
+    if (success) //如果成功了
     {
-      end_pt_ = next_wp;
+      end_pt_ = next_wp; //我们给定的点就是当前这一段的终点 
 
       /*** display ***/
       constexpr double step_size_t = 0.1;
@@ -177,13 +200,14 @@ namespace ego_planner
 
       end_vel_.setZero();
       have_target_ = true;
-      have_new_target_ = true;
+      have_new_target_ = true; //这里我们生成了轨迹FSM还是处于WAIT_TAGET状态
 
       /*** FSM ***/
       if (exec_state_ == WAIT_TARGET)
-        changeFSMExecState(GEN_NEW_TRAJ, "TRIG");
+        changeFSMExecState(GEN_NEW_TRAJ, "TRIG"); //GEN_NEW_TRAJ 生成新的轨迹 
+       
       else
-      {
+      { /*当前的轨迹一直在甩，无法确定轨迹时，rivz重新指点，重新规划 */
         while (exec_state_ != EXEC_TRAJ)
         {
           ros::spinOnce();
@@ -210,16 +234,17 @@ namespace ego_planner
 
   void EGOReplanFSM::waypointCallback(const geometry_msgs::PoseStampedPtr &msg)
   {
-    if (msg->pose.position.z < -0.1)
+    if (msg->pose.position.z < -0.1)//如果目标点的高度小于-0.1，那么就不接受这个目标点
       return;
 
     cout << "Triggered!" << endl;
     // trigger_ = true;
-    init_pt_ = odom_pos_;
+    init_pt_ = odom_pos_;//初始化点 
 
-    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
-
-    planNextWaypoint(end_wp);
+    //Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
+    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z) ;//rivz中指定的目标点，这里我们给定了z轴的高度 
+              //只需要获取x ， y的数据即可
+    planNextWaypoint(end_wp); //rivz 指点规划
   }
 
   void EGOReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg)
@@ -401,12 +426,12 @@ namespace ego_planner
 
     have_recv_pre_agent_ = true;
   }
-
+ /*-----------------改变状态机执行状态----------------------------------*/
   void EGOReplanFSM::changeFSMExecState(FSM_EXEC_STATE new_state, string pos_call)
   {
 
     if (new_state == exec_state_)
-      continously_called_times_++;
+      continously_called_times_++; //如果状态位不改变 标志为就一直递增 
     else
       continously_called_times_ = 1;
 
@@ -434,7 +459,7 @@ namespace ego_planner
 
     static int fsm_num = 0;
     fsm_num++;
-    if (fsm_num == 100)
+    if (fsm_num == 100) //每隔一s打印当前的状态
     {
       printFSMExecState();
       if (!have_odom_)
@@ -444,7 +469,7 @@ namespace ego_planner
       fsm_num = 0;
     }
 
-    switch (exec_state_)
+    switch (exec_state_)//根据当前的状态执行相应的操作
     {
     case INIT:
     {
@@ -453,7 +478,7 @@ namespace ego_planner
         goto force_return;
         // return;
       }
-      changeFSMExecState(WAIT_TARGET, "FSM");
+      changeFSMExecState(WAIT_TARGET, "FSM");//如果有odom，那么就将状态改为等待目标 等待rivz指点
       break;
     }
 
@@ -504,7 +529,7 @@ namespace ego_planner
 
       break;
     }
-
+  /*------------------------second ： 生成全局轨迹后，执行以下变更 --------------------------------------------------------------*/
     case GEN_NEW_TRAJ:
     {
 

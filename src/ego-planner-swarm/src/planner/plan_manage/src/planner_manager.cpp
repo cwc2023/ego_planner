@@ -16,16 +16,17 @@ namespace ego_planner
   {
     /* read algorithm parameters */
 
-    nh.param("manager/max_vel", pp_.max_vel_, -1.0);
-    nh.param("manager/max_acc", pp_.max_acc_, -1.0);
-    nh.param("manager/max_jerk", pp_.max_jerk_, -1.0);
-    nh.param("manager/feasibility_tolerance", pp_.feasibility_tolerance_, 0.0);
-    nh.param("manager/control_points_distance", pp_.ctrl_pt_dist, -1.0);
-    nh.param("manager/planning_horizon", pp_.planning_horizen_, 5.0);
-    nh.param("manager/use_distinctive_trajs", pp_.use_distinctive_trajs, false);
-    nh.param("manager/drone_id", pp_.drone_id, -1);
+    nh.param("manager/max_vel", pp_.max_vel_, -1.0);//规划过程中的最大速度
+    nh.param("manager/max_acc", pp_.max_acc_, -1.0);//最大加速度
+    nh.param("manager/max_jerk", pp_.max_jerk_, -1.0);//最大加加速度（即jerk），机器人在规划其路径时能够达到的最大jerk。
+    nh.param("manager/feasibility_tolerance", pp_.feasibility_tolerance_, 0.0);//可行性容差，用于在路径规划过程中考虑到的误差范围。
+    nh.param("manager/control_points_distance", pp_.ctrl_pt_dist, -1.0);//控制点间距，描述在B样条优化中，控制点之间的距离。
+    nh.param("manager/planning_horizon", pp_.planning_horizen_, 5.0);//计划视野，描述机器人在规划其路径时考虑到的时间范围或距离范围。
+    nh.param("manager/use_distinctive_trajs", pp_.use_distinctive_trajs, false);//是否使用独特的轨迹，这是一个布尔值，用于决定是否在路径规划过程中生成独特的轨迹。
+    nh.param("manager/drone_id", pp_.drone_id, -1);//无人机ID，用于在多无人机环境中标识不同的无人机
 
-    local_data_.traj_id_ = 0;
+    local_data_.traj_id_ = 0;//初始化了当前轨迹的ID，将它设置为0
+    //这两行代码是创建并初始化了一个新的GridMap对象。GridMap是用于表示机器人环境的栅格地图
     grid_map_.reset(new GridMap);
     grid_map_->initMap(nh);
 
@@ -33,13 +34,18 @@ namespace ego_planner
     // obj_predictor_->init();
     // obj_pub_ = nh.advertise<visualization_msgs::Marker>("/dynamic/obj_prdi", 10); // zx-todo
 
-    bspline_optimizer_.reset(new BsplineOptimizer);
-    bspline_optimizer_->setParam(nh);
-    bspline_optimizer_->setEnvironment(grid_map_, obj_predictor_);
+    bspline_optimizer_.reset(new BsplineOptimizer);//这行代码创建了一个新的BsplineOptimizer对象。
+                                //这个对象用于优化机器人的路径，使得路径平滑且满足机器人的动力学约束。
+    bspline_optimizer_->setParam(nh);//这行代码设置了BsplineOptimizer对象的参数。
+    bspline_optimizer_->setEnvironment(grid_map_, obj_predictor_);//设置B样条优化器的环境，包括网格地图和对象预测器。
     bspline_optimizer_->a_star_.reset(new AStar);
     bspline_optimizer_->a_star_->initGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
+    /*这两行代码创建并初始化了一个新的A算法对象，并将其与当前的网格地图关联起来。A算法是一种用于寻找最短路径的算法。*/
+    visualization_ = vis;//这行代码把一个PlanningVisualization对象的引用保存下来，以便于在规划过程中进行可视化。
+  /*总的来说，这个函数的目的是为了初始化路径规划的关键部件，并且初始化一些基本的参数，这使得路径规划可以根据特定的环境和参数
+  来进行路径规划*/
 
-    visualization_ = vis;
+
   }
 
   // !SECTION
@@ -457,63 +463,66 @@ namespace ego_planner
   bool EGOPlannerManager::planGlobalTraj(const Eigen::Vector3d &start_pos, const Eigen::Vector3d &start_vel, const Eigen::Vector3d &start_acc,
                                          const Eigen::Vector3d &end_pos, const Eigen::Vector3d &end_vel, const Eigen::Vector3d &end_acc)
   {
+        /*这个函数大概就是 生成全局轨迹 如果距离大于4m 就插点 然后根据点的数量选择不同的轨迹生成方式 */
+
 
     // generate global reference trajectory
 
-    vector<Eigen::Vector3d> points;
+    vector<Eigen::Vector3d> points; //定义容器来存放始末位置点 
     points.push_back(start_pos);
     points.push_back(end_pos);
 
     // insert intermediate points if too far
     vector<Eigen::Vector3d> inter_points;
-    const double dist_thresh = 4.0;
+    const double dist_thresh = 4.0; ////判断始末位置是否大于4.0
 
     for (size_t i = 0; i < points.size() - 1; ++i)
     {
-      inter_points.push_back(points.at(i));
-      double dist = (points.at(i + 1) - points.at(i)).norm();
+      inter_points.push_back(points.at(i));//vecotr::at(i) 传回容器的索引值的数据， 超过界限输出out of range
+      double dist = (points.at(i + 1) - points.at(i)).norm();//始末位置xyz位置差平方和开根号，也就算求2 范数
 
-      if (dist > dist_thresh)
+      if (dist > dist_thresh) //判断始末位置是否大于4.0
       {
-        int id_num = floor(dist / dist_thresh) + 1;
+        int id_num = floor(dist / dist_thresh) + 1;//向下取整 返回小于等于x的数
 
         for (int j = 1; j < id_num; ++j)
         {
           Eigen::Vector3d inter_pt =
+          /*这里参考了线性贝塞尔曲线 Bezier Curve B(t)=P0+(P1-P0)*t = (1-t)*P0, t 取[0,1]*/
               points.at(i) * (1.0 - double(j) / id_num) + points.at(i + 1) * double(j) / id_num;
-          inter_points.push_back(inter_pt);
+          inter_points.push_back(inter_pt); //插点完成  这里的大概意思是 比如说12m的话 我们会插三个点 4m 8m 12m
         }
       }
     }
 
-    inter_points.push_back(points.back());
+    inter_points.push_back(points.back());//将终点传入新的waypoint 中 
 
     // write position matrix
-    int pt_num = inter_points.size();
-    Eigen::MatrixXd pos(3, pt_num);
+    int pt_num = inter_points.size();//共有多少个waypoints
+    Eigen::MatrixXd pos(3, pt_num);//定义一个3*pt_num的矩阵 用来存放位置信息
     for (int i = 0; i < pt_num; ++i)
-      pos.col(i) = inter_points[i];
+      pos.col(i) = inter_points[i]; //赋值提取
 
     Eigen::Vector3d zero(0, 0, 0);
-    Eigen::VectorXd time(pt_num - 1);
+    Eigen::VectorXd time(pt_num - 1);//每一段的时间
     for (int i = 0; i < pt_num - 1; ++i)
     {
-      time(i) = (pos.col(i + 1) - pos.col(i)).norm() / (pp_.max_vel_);
+      time(i) = (pos.col(i + 1) - pos.col(i)).norm() / (pp_.max_vel_);//每一段时间点等于两点之间欧式距离处以之前设置好的最大速度
     }
 
     time(0) *= 2.0;
     time(time.rows() - 1) *= 2.0;
-
+    /*定义多项式轨迹 通过minimum snap 求解得到光滑的轨迹 */
     PolynomialTraj gl_traj;
-    if (pos.cols() >= 3)
+    if (pos.cols() >= 3) //如果waypoint的点大于三个
       gl_traj = PolynomialTraj::minSnapTraj(pos, start_vel, end_vel, start_acc, end_acc, time);
-    else if (pos.cols() == 2)
+    else if (pos.cols() == 2)//如果waypoint的等于两个
       gl_traj = PolynomialTraj::one_segment_traj_gen(start_pos, start_vel, start_acc, end_pos, end_vel, end_acc, time(0));
     else
       return false;
 
     auto time_now = ros::Time::now();
-    global_data_.setGlobalTraj(gl_traj, time_now);
+    global_data_.setGlobalTraj(gl_traj, time_now);//把生成的全局轨迹和时间传入global_data_中  setGlobalTraj里面会对时间进行累加
 
     return true;
   }

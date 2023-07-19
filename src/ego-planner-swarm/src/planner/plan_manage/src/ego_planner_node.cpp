@@ -8,12 +8,12 @@ using namespace ego_planner;
 int main(int argc, char **argv)
 {
 
-  ros::init(argc, argv, "ego_planner_node");
-  ros::NodeHandle nh("~");
+  ros::init(argc, argv, "ego_planner_node");//
+  ros::NodeHandle nh("~");//创建一个私有的ROS节点句柄（NodeHandle）实例
 
-  EGOReplanFSM rebo_replan;
+  EGOReplanFSM rebo_replan;//创建一个有限状态机对象
 
-  rebo_replan.init(nh);
+  rebo_replan.init(nh); //从这里开始初始化
 
   // ros::Duration(1.0).sleep();
   ros::spin();
