@@ -51,7 +51,7 @@ namespace ego_planner
   // !SECTION
 
   // SECTION rebond replanning
-
+   /* ------------进入重要的函数进行重新规划局部规划 --------------------------------*/
   bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d start_vel,
                                         Eigen::Vector3d start_acc, Eigen::Vector3d local_target_pt,
                                         Eigen::Vector3d local_target_vel, bool flag_polyInit, bool flag_randomPolyTraj)
@@ -62,6 +62,8 @@ namespace ego_planner
     // cout << "start: " << start_pt.transpose() << ", " << start_vel.transpose() << "\ngoal:" << local_target_pt.transpose() << ", " << local_target_vel.transpose()
     //      << endl;
 
+
+/*如果当前位置和局部目标位置欧式距离小于0.2 判断为接近目标 返回false */
     if ((start_pt - local_target_pt).norm() < 0.2)
     {
       cout << "Close to goal" << endl;
@@ -69,12 +71,12 @@ namespace ego_planner
       return false;
     }
 
-    bspline_optimizer_->setLocalTargetPt(local_target_pt);
+    bspline_optimizer_->setLocalTargetPt(local_target_pt); //获取局部目标点
 
     ros::Time t_start = ros::Time::now();
     ros::Duration t_init, t_opt, t_refine;
 
-    /*** STEP 1: INIT ***/
+    /*** STEP 1: INIT ***/ //接下来这部分将minumsnap获得的多项式轨迹转换为B样条轨迹
     double ts = (start_pt - local_target_pt).norm() > 0.1 ? pp_.ctrl_pt_dist / pp_.max_vel_ * 1.5 : pp_.ctrl_pt_dist / pp_.max_vel_ * 5; // pp_.ctrl_pt_dist / pp_.max_vel_ is too tense, and will surely exceed the acc/vel limits
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
     static bool flag_first_call = true, flag_force_polynomial = false;
@@ -219,12 +221,15 @@ namespace ego_planner
           flag_regenerate = true;
         }
       }
-    } while (flag_regenerate);
+    } while (flag_regenerate); //到这里重新规划的代码完毕 也就是多项式轨迹转换为B样条轨迹 
 
     Eigen::MatrixXd ctrl_pts, ctrl_pts_temp;
+    /*----------------通过b样条 b-spline参数优化得到控制点----------------*/
     UniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
 
     vector<std::pair<int, int>> segments;
+    /*贼长 通过 a star 搜索来使轨迹无碰撞对应fast_planner的esdf 提取的障碍物距离的作用和check_collsion_and_rebound{}很像*/
+    /*-------------贼重要-----------------------*/
     segments = bspline_optimizer_->initControlPoints(ctrl_pts, true);
 
     t_init = ros::Time::now() - t_start;
@@ -244,10 +249,11 @@ namespace ego_planner
       double final_cost, min_cost = 999999.0;
       for (int i = trajs.size() - 1; i >= 0; i--)
       {
+        /*--------------------这一块贼重要，对应b样条优化那一讲------------------------*/
         if (bspline_optimizer_->BsplineOptimizeTrajRebound(ctrl_pts_temp, final_cost, trajs[i], ts))
         {
 
-          cout << "traj " << trajs.size() - i << " success." << endl;
+          cout << "traj " << trajs.size() - i << " success." << endl; //如果优化成功后会出现traj 1 success 
 
           flag_step_1_success = true;
           if (final_cost < min_cost)
@@ -282,7 +288,7 @@ namespace ego_planner
       visualization_->displayInitPathList(point_set, 0.2, 0);
     }
 
-    cout << "plan_success=" << flag_step_1_success << endl;
+    cout << "plan_success=" << flag_step_1_success << endl; //如果优化成功后会出现plan_success=1 
     if (!flag_step_1_success)
     {
       visualization_->displayOptimalList(ctrl_pts, 0);
@@ -294,8 +300,8 @@ namespace ego_planner
 
     UniformBspline pos = UniformBspline(ctrl_pts, 3, ts);
     pos.setPhysicalLimits(pp_.max_vel_, pp_.max_acc_, pp_.feasibility_tolerance_);
-
-    /*** STEP 3: REFINE(RE-ALLOCATE TIME) IF NECESSARY ***/
+/*----------------------------------------------------是否需要重分配 -----------------------------------*/
+    /*** STEP 3: REFINE(RE-ALLOCATE TIME) IF NECESSARY   ***/
     // Note: Only adjust time in single drone mode. But we still allow drone_0 to adjust its time profile.
     if (pp_.drone_id <= 0)
     {
@@ -526,7 +532,7 @@ namespace ego_planner
 
     return true;
   }
-
+  /*--------------------one -------------------*/
   bool EGOPlannerManager::refineTrajAlgo(UniformBspline &traj, vector<Eigen::Vector3d> &start_end_derivative, double ratio, double &ts, Eigen::MatrixXd &optimal_control_points)
   {
     double t_inc;
@@ -534,7 +540,7 @@ namespace ego_planner
     Eigen::MatrixXd ctrl_pts; // = traj.getControlPoint()
 
     // std::cout << "ratio: " << ratio << std::endl;
-    reparamBspline(traj, start_end_derivative, ratio, ctrl_pts, ts, t_inc);
+    reparamBspline(traj, start_end_derivative, ratio, ctrl_pts, ts, t_inc); //得到控制点
 
     traj = UniformBspline(ctrl_pts, 3, ts);
 
@@ -542,7 +548,7 @@ namespace ego_planner
     bspline_optimizer_->ref_pts_.clear();
     for (double t = 0; t < traj.getTimeSum() + 1e-4; t += t_step)
       bspline_optimizer_->ref_pts_.push_back(traj.evaluateDeBoorT(t));
-
+    /*-----------------------two b样条轨迹重优化-------------------------*/
     bool success = bspline_optimizer_->BsplineOptimizeTrajRefine(ctrl_pts, ts, optimal_control_points);
 
     return success;

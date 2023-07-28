@@ -179,7 +179,7 @@ namespace ego_planner
   void EGOReplanFSM::planNextWaypoint(const Eigen::Vector3d next_wp) //next_wp 我们给定的目标点
   {
     bool success = false;
-    /*生成参考轨迹 ，主要是为了生成一条不考虑碰撞的光滑轨迹 */
+       /*生成参考轨迹 ，主要是为了生成一条不考虑碰撞的光滑轨迹 */
     success = planner_manager_->planGlobalTraj(odom_pos_, odom_vel_, Eigen::Vector3d::Zero(), next_wp, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
                             // 当前的位置和速度 odom_pos_, odom_vel_
               /*-----------------*这里是显示插值点 -------------------- */             
@@ -529,17 +529,17 @@ namespace ego_planner
 
       break;
     }
-  /*------------------------second ： 生成全局轨迹后，执行以下变更 --------------------------------------------------------------*/
+  /*------------------------second ： 生成全局轨迹后，执行以下状态 --------------------------------------------------------------*/
     case GEN_NEW_TRAJ:
     {
 
       // Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
       // start_yaw_(0)         = atan2(rot_x(1), rot_x(0));
       // start_yaw_(1) = start_yaw_(2) = 0.0;
-
+/*-----------------------------third 进行重规划 优化--------------------------------------------------------------------*/
       bool success = planFromGlobalTraj(10); // zx-todo
       if (success)
-      {
+      {/*开始执行 此时如果检测到有碰撞就会进行重新规划*/
         changeFSMExecState(EXEC_TRAJ, "FSM");
         flag_escape_emergency_ = true;
         publishSwarmTrajs(false);
@@ -551,7 +551,7 @@ namespace ego_planner
       break;
     }
 
-    case REPLAN_TRAJ:
+    case REPLAN_TRAJ:  //重规划 
     {
 
       if (planFromCurrentTraj(1))
@@ -566,7 +566,8 @@ namespace ego_planner
 
       break;
     }
-
+   /*---------------------------Five 执行轨迹------------------------------------------------------------------------*/
+   //在执行的时候无人机已经开始飞行了
     case EXEC_TRAJ:
     {
       /* determine if need to replan */
@@ -598,10 +599,11 @@ namespace ego_planner
             planNextWaypoint(wps_[wp_id_]);
           }
 
-          changeFSMExecState(WAIT_TARGET, "FSM");
+          changeFSMExecState(WAIT_TARGET, "FSM");//执行完毕uav回到等待目标的状态
           goto force_return;
           // return;
         }
+        /*------------------------------Six 如果没有到达目的点 继续进行重新规划---------------------------------------------*/
         else if ((end_pt_ - pos).norm() > no_replan_thresh_ && t_cur > replan_thresh_)
         {
           changeFSMExecState(REPLAN_TRAJ, "FSM");
@@ -639,27 +641,31 @@ namespace ego_planner
   force_return:;
     exec_timer_.start();
   }
-
+  /*全局轨迹规划上调用重规划（replan）的函数* 方法的参数是一个整数trial_times，
+  这个参数默认值是1，代表试验次数。方法的返回值是布尔类型，代表规划是否成功。*/
   bool EGOReplanFSM::planFromGlobalTraj(const int trial_times /*=1*/) //zx-todo
-  {
+  { /*设置起始的位置 速度 加速度 无人机的当前状态由odom_pos_ 和odom_vel_两个成员变量保存 起始的加速度设置为 */
     start_pt_ = odom_pos_;
     start_vel_ = odom_vel_;
     start_acc_.setZero();
 
-    bool flag_random_poly_init;
+    bool flag_random_poly_init; //这个bool变量用来决定是否在重新规划时随机初始化轨迹
     if (timesOfConsecutiveStateCalls().first == 1)
-      flag_random_poly_init = false;
+      flag_random_poly_init = false;//当连续状态调用次数为1时，不随机初始化轨迹
     else
-      flag_random_poly_init = true;
+      flag_random_poly_init = true;//否则会随即初始化轨迹
 
-    for (int i = 0; i < trial_times; i++)
+    for (int i = 0; i < trial_times; i++) //trial_times 试验次数 在循环中调用callReboundReplan函数进行重新规划
     {
+/*------------------------------four 开始进入后端优化部分------------------------------------------------------------------------*/
       if (callReboundReplan(true, flag_random_poly_init))
       {
         return true;
       }
-    }
-    return false;
+    } 
+    /*callReboundReplan的第一个参数是true，表示启用重规划；第二个参数是flag_random_poly_init，
+    用来决定是否随机初始化轨迹。只要callReboundReplan方法在试验过程中有一次成功，该方法就返回true，表示重规划成功。*/
+    return false;//如果所有的试验都失败，那么EGOReplanFSM::planFromGlobalTraj方法返回false，表示重规划失败
   }
 
   bool EGOReplanFSM::planFromCurrentTraj(const int trial_times /*=1*/)
@@ -754,7 +760,7 @@ namespace ego_planner
 
         if (planFromCurrentTraj()) // Make a chance
         {
-          changeFSMExecState(EXEC_TRAJ, "SAFETY");
+          changeFSMExecState(EXEC_TRAJ, "SAFETY"); //判断有没有碰撞，如果有碰撞就进行重规划
           publishSwarmTrajs(false);
           return;
         }
@@ -780,8 +786,8 @@ namespace ego_planner
   bool EGOReplanFSM::callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj)
   {
 
-    getLocalTarget();
-
+    getLocalTarget();//获取局部目标值 
+   /*------进入重要的函数进行重新规划局部规划---------------*/
     bool plan_and_refine_success =
         planner_manager_->reboundReplan(start_pt_, start_vel_, start_acc_, local_target_pt_, local_target_vel_, (have_new_target_ || flag_use_poly_init), flag_randomPolyTraj);
     have_new_target_ = false;
@@ -877,7 +883,7 @@ namespace ego_planner
       swarm_trajs_pub_.publish(multi_bspline_msgs_buf_);
     }
 
-    broadcast_bspline_pub_.publish(bspline);
+    broadcast_bspline_pub_.publish(bspline);//把bspline发布出去
   }
 
   bool EGOReplanFSM::callEmergencyStop(Eigen::Vector3d stop_pos)

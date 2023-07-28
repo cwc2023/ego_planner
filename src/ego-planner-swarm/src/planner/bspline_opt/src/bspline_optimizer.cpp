@@ -1420,9 +1420,9 @@ namespace ego_planner
   bool BsplineOptimizer::BsplineOptimizeTrajRefine(const Eigen::MatrixXd &init_points, const double ts, Eigen::MatrixXd &optimal_points)
   {
 
-    setControlPoints(init_points);
-    setBsplineInterval(ts);
-
+    setControlPoints(init_points);  //设置控制点
+    setBsplineInterval(ts);          //设置控制向量
+    /*------------------------three------------------------*/
     bool flag_success = refine_optimize();
 
     optimal_points = cps_.points;
@@ -1621,7 +1621,7 @@ namespace ego_planner
       lbfgs_params.mem_size = 16;
       lbfgs_params.max_iterations = 200;
       lbfgs_params.g_epsilon = 0.001;
-
+    /*----------------------------------for-------------------------*/
       int result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost, BsplineOptimizer::costFunctionRefine, NULL, NULL, this, &lbfgs_params);
       if (result == lbfgs::LBFGS_CONVERGENCE ||
           result == lbfgs::LBFGSERR_MAXIMUMITERATION ||
@@ -1687,10 +1687,11 @@ namespace ego_planner
     // Eigen::MatrixXd g_mov_objs = Eigen::MatrixXd::Zero(3, cps_.size);
     Eigen::MatrixXd g_swarm = Eigen::MatrixXd::Zero(3, cps_.size);
     Eigen::MatrixXd g_terminal = Eigen::MatrixXd::Zero(3, cps_.size);
-
-    calcSmoothnessCost(cps_.points, f_smoothness, g_smoothness);
-    calcDistanceCostRebound(cps_.points, f_distance, g_distance, iter_num_, f_smoothness);
-    calcFeasibilityCost(cps_.points, f_feasibility, g_feasibility);
+    /*---------------------------------------对应论文中-------------------------------------------*/
+    calcSmoothnessCost(cps_.points, f_smoothness, g_smoothness);//对应论文中的平滑项 smoothness penalty
+    calcDistanceCostRebound(cps_.points, f_distance, g_distance, iter_num_, f_smoothness); //collision penalty
+    calcFeasibilityCost(cps_.points, f_feasibility, g_feasibility); //feasibility penalty
+    
     // calcMovingObjCost(cps_.points, f_mov_objs, g_mov_objs);
     calcSwarmCost(cps_.points, f_swarm, g_swarm);
     calcTerminalCost(cps_.points, f_terminal, g_terminal);
@@ -1718,9 +1719,9 @@ namespace ego_planner
 
     //time_satrt = ros::Time::now();
 
-    calcSmoothnessCost(cps_.points, f_smoothness, g_smoothness);
-    calcFitnessCost(cps_.points, f_fitness, g_fitness);
-    calcFeasibilityCost(cps_.points, f_feasibility, g_feasibility);
+    calcSmoothnessCost(cps_.points, f_smoothness, g_smoothness);//和论文中的平滑项一样
+    calcFitnessCost(cps_.points, f_fitness, g_fitness);//想让我们重分配时间后的轨迹和我们之前的轨迹重合
+    calcFeasibilityCost(cps_.points, f_feasibility, g_feasibility);//和论文中的feasibility一样
 
     /* ---------- convert to solver format...---------- */
     f_combine = lambda1_ * f_smoothness + lambda4_ * f_fitness + lambda3_ * f_feasibility;

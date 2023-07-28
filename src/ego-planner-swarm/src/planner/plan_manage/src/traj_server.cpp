@@ -226,7 +226,7 @@ void cmdCallback(const ros::TimerEvent &e)
 
   last_yaw_ = cmd.yaw;
 
-  pos_cmd_pub.publish(cmd);
+  pos_cmd_pub.publish(cmd);//把我们的这些速度 yaw等信息发布给控制器 就over了
 }
 
 int main(int argc, char **argv)
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
   // ros::NodeHandle node;
   ros::NodeHandle nh("~");
 
-  ros::Subscriber bspline_sub = nh.subscribe("planning/bspline", 10, bsplineCallback);
+  ros::Subscriber bspline_sub = nh.subscribe("planning/bspline", 10, bsplineCallback);//订阅planning/bspline话题，接收轨迹
 
   pos_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
 
