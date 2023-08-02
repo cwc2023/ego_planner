@@ -1,4 +1,6 @@
+<!-- 主要的不同是我们在实际飞行中用的vins_fusion的信息 而在仿真用我们得用gazebo的d435i提供的信息 -->
 <launch>
+
     <!-- number of moving objects -->
     <arg name="obj_num" value="10" />
     <arg name="drone_id" value="0"/>
@@ -38,17 +40,21 @@
         <arg name="max_vel" value="1.0" />
         <arg name="max_acc" value="3.0" />
         <!--always set to 1.5 times grater than sensing horizen-->
-        <arg name="planning_horizon" value="7.5" />
-        <arg name="use_distinctive_trajs" value="true" />
+        <arg name="planning_horizon" value="7.5" />  <!-- 路径规划的时间范围 7.5秒以内的  -->
+        <arg name="use_distinctive_trajs" value="true" />  <!-- 是否使用独特的轨迹 实机是没有的  -->
         <!-- 1: use 2D Nav Goal to select goal  -->
         <!-- 2: use global waypoints below  -->
-        <arg name="flight_type" value="1" />
+        <arg name="flight_type" value="1" /> 
         <!-- global waypoints -->
         <!-- It generates a piecewise min-snap traj passing all waypoints -->
+
+<!-- 这一部分代码定义了无人机的全局航点 (global waypoints)。这些航点是无人机需要经过的位置点，
+算法会生成一条最小冲量（min-snap）轨迹，让无人机通过所有的这些航点 -->
         <arg name="point_num" value="1" /> <!-- number of waypoints 设置的点的数量 对应ego_replan_fsm.cpp中33到38行代码-->
         <arg name="point0_x" value="12" />
         <arg name="point0_y" value="1" />
         <arg name="point0_z" value="1.5" />
+        <!-- 定义了每个航点的位置 第一个的位置为(12 , 1 , 1.5)-->
         <arg name="point1_x" value="-15.0" />
         <arg name="point1_y" value="0.0" />
         <arg name="point1_z" value="1.0" />
@@ -68,17 +74,40 @@
         <remap from="~planning/bspline" to="planning/bspline"/>
         <param name="traj_server/time_forward" value="1.0" type="double"/>
     </node>
+    <!-- 启动一个 traj_server的节点 这个节点是根据 done_id参数生成的，比如 drone_id是0的话 那么这个
+    节点的名字就会是drone_0_traj_server 
+        remap from="position_cmd" to="$(arg cmd_topic)" 这一行是重新映射position_cmd话题为cmd_topic
+        也就是说原本订阅或者发布的position_cmd话题变成了订阅或者发布的cmd_topic话题
 
+        第二行也是这个意思 
+
+        最后一行设置了一个 traj_server/time_forward的参数 其值为1.0 这个参数用来控制轨迹的生成或者执行
+    
+    -->
+
+
+    <!-- --> 
     <node pkg="odom_visualization" name="drone_$(arg drone_id)_odom_visualization" type="odom_visualization" output="screen">
         <remap from="~odom" to="$(arg odom_topic)"/>
-        <param name="color/a" value="1.0"/>    
-        <param name="color/r" value="0.0"/>        
+        <param name="color/a" value="1.0"/>   <!-- 设置可视化对象的颜色透明度--> 
+        <param name="color/r" value="0.0"/>   <!-- 这里的rgb 都是0 表示 黑色 -->      
         <param name="color/g" value="0.0"/>        
         <param name="color/b" value="0.0"/>       
-        <param name="covariance_scale" value="100.0"/>       
-        <param name="robot_scale" value="1.0"/>
-        <param name="tf45" value="false"/>
+        <param name="covariance_scale" value="100.0"/>   <!--用于设置协方差的缩放因子，用于调整协方差椭球的大小 -->     
+        <param name="robot_scale" value="1.0"/>  <!--设置机器人模型的缩放因子 --> 
+        <param name="tf45" value="false"/> 
         <param name="drone_id" value="drone_id"/>
     </node>
 
+<!-- 
+    这部分代码是用于启动一个名为 odom_visualization 的节点，这个节点来自 odom_visualization 这个软件包。这个节点的名字是根据 drone_id 参数来生成的，
+    比如，如果 drone_id 的值是 0，那么这个节点的名字就会是 drone_0_odom_visualization。
+
+<param name="drone_id" value="drone_id"/> 这一行设置了一个名为 drone_id 的参数，其值是 "drone_id"，
+这可能是一个错误，应该将其设置为某个具体的值或者参数，例如 <param name="drone_id" value="$(arg drone_id)"/>。
+-->
+
 </launch>
+
+
+

@@ -1,3 +1,7 @@
+
+<!-- 主要的不同是我们在实际飞行中用的vins_fusion的信息 而在仿真用我们得用gazebo的d435i提供的信息 -->
+<!-- 实际飞行中的代码 -->
+
 <launch>
     <!-- number of moving objects -->
     <arg name="obj_num" value="10" />
