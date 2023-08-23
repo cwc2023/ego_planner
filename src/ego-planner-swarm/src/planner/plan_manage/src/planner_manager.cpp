@@ -469,7 +469,7 @@ namespace ego_planner
   bool EGOPlannerManager::planGlobalTraj(const Eigen::Vector3d &start_pos, const Eigen::Vector3d &start_vel, const Eigen::Vector3d &start_acc,
                                          const Eigen::Vector3d &end_pos, const Eigen::Vector3d &end_vel, const Eigen::Vector3d &end_acc)
   {
-        /*这个函数大概就是 生成全局轨迹 如果距离大于4m 就插点 然后根据点的数量选择不同的轨迹生成方式 */
+        /*这个函数大概就是 生成一段不考虑障碍物的全局轨迹 如果距离大于4m 就插点 然后根据点的数量选择不同的轨迹生成方式 */
 
 
     // generate global reference trajectory

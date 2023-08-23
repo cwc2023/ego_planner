@@ -1,8 +1,38 @@
 <launch>
-        <node pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl" output="screen">
+    <!-- 启动一个px4ctrl_node节点，并设置一些它需要的参数和主题映射关系-->
+
+        <node pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl" output="screen"> 
+        <!-- 启动来自px4ctrl的px4ctrl_node节点 节点的民称命名为px4ctrl 并且将该节点的输出信息打印到屏幕上-->
+
             <!-- <remap from="~odom" to="/vicon_imu_ekf_odom" /> -->
+
             <remap from="odom" to="mavros/local_position/odom" />
+            <!-- 将该节点内部的odom主题重新映射到全局命名空间下的mavros/local_position/odom 当节点尝试订阅或者发布odom主题时
+            ，实际上他会订阅或者发布mavros/local_position/odom主题-->
+
             <remap from="cmd" to="planning/pos_cmd" />
+            <!-- 将该节点内部的cmd主题重新映射到planning/pos_cmd主题 -->
+
             <rosparam command="load" file="$(find px4ctrl)/config/ctrl_param_fpv.yaml" />
+            <!-- 从px4ctrl包的config/ctrl_param_fpv.yaml文件中加载ROS参数  -->
         </node>
+</launch>
+
+<!-- 这里启动的px4ctrl_node节点 用来接收机器人的位置信息（mavros/local_position/odom）然后输出控制命令（planning/pos_cmd)用来控制无人机的运动-->
+
+
+
+<!-- 这是原本的fast250的仿真的文件 -->
+<launch>
+
+	<node pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl" output="screen">
+        	<!-- <remap from="~odom" to="/vicon_imu_ekf_odom" /> -->
+			
+			<remap from="~odom" to="/vins_fusion/imu_propagate" />
+
+		<remap from="~cmd" to="/position_cmd" />
+
+        <rosparam command="load" file="$(find px4ctrl)/config/ctrl_param_fpv.yaml" />
+	</node>
+ 
 </launch>

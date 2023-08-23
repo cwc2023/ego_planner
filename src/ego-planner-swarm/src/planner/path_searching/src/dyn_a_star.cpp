@@ -295,6 +295,7 @@ vector<Vector3d> AStar::getPath()
     for (auto ptr : gridPath_)
         path.push_back(Index2Coord(ptr->index));
 
-    reverse(path.begin(), path.end());
+    reverse(path.begin(), path.end()); //反转一下
     return path;
+    //在 bspline_optimizer.cpp 处用到
 }

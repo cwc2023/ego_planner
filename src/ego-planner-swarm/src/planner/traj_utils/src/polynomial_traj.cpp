@@ -1,11 +1,13 @@
 #include <iostream>
 #include <traj_utils/polynomial_traj.h>
 
+
+
 PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eigen::Vector3d &start_vel,
                                            const Eigen::Vector3d &end_vel, const Eigen::Vector3d &start_acc,
                                            const Eigen::Vector3d &end_acc, const Eigen::VectorXd &Time)
 {
-  int seg_num = Time.size();
+  int seg_num = Time.size();//轨迹段数
   Eigen::MatrixXd poly_coeff(seg_num, 3 * 6);
   Eigen::VectorXd Px(6 * seg_num), Py(6 * seg_num), Pz(6 * seg_num);
 
@@ -20,6 +22,7 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
   };
 
   /* ---------- end point derivative ---------- */
+  /*--------------端点以及端点的微分约束------------*/
   Eigen::VectorXd Dx = Eigen::VectorXd::Zero(seg_num * 6);
   Eigen::VectorXd Dy = Eigen::VectorXd::Zero(seg_num * 6);
   Eigen::VectorXd Dz = Eigen::VectorXd::Zero(seg_num * 6);
@@ -27,6 +30,8 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
   for (int k = 0; k < seg_num; k++)
   {
     /* position to derivative */
+    /*对多段初末位置进行约束
+    pos： 3*3的matrix  */
     Dx(k * 6) = Pos(0, k);
     Dx(k * 6 + 1) = Pos(0, k + 1);
     Dy(k * 6) = Pos(1, k);
@@ -34,6 +39,7 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
     Dz(k * 6) = Pos(2, k);
     Dz(k * 6 + 1) = Pos(2, k + 1);
 
+/*对初末的速度 加速度进行约束*/
     if (k == 0)
     {
       Dx(k * 6 + 2) = start_vel(0);
@@ -44,6 +50,7 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
       Dy(k * 6 + 4) = start_acc(1);
       Dz(k * 6 + 4) = start_acc(2);
     }
+    /*对终点的进行约束*/
     else if (k == seg_num - 1)
     {
       Dx(k * 6 + 3) = end_vel(0);
@@ -57,9 +64,25 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
   }
 
   /* ---------- Mapping Matrix A ---------- */
+  /*
+  A = [A1,0,0
+      0 ,...,0
+      0,...0,Ak] 对角矩阵
+
+
+  Ab= [1, 0 ,0 ,0 ,0 ,0 ;]
+      1,dt1,dt2,dt3,dt4,dt5;
+      0 , 1, 0 ,0 ,0 ,0;
+      0 , 1  2*dt 3*dt2 4*dt3 5*dt4;
+      0 , 0 ,2 , 0 , 0 , 0;
+      0 , 0 ,2 , 6*dt, 12*dt2,20*dt3];
+    
+    dt2 这里的2代表平方 t的个数为n
+  
+  */
   Eigen::MatrixXd Ab;
   Eigen::MatrixXd A = Eigen::MatrixXd::Zero(seg_num * 6, seg_num * 6);
-
+/*k代表段数*/
   for (int k = 0; k < seg_num; k++)
   {
     Ab = Eigen::MatrixXd::Zero(6, 6);
@@ -75,9 +98,13 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
   /* ---------- Produce Selection Matrix C' ---------- */
   Eigen::MatrixXd Ct, C;
 
-  num_f = 2 * seg_num + 4; // 3 + 3 + (seg_num - 1) * 2 = 2m + 4
-  num_p = 2 * seg_num - 2; //(seg_num - 1) * 2 = 2m - 2
-  num_d = 6 * seg_num;
+  num_f = 2 * seg_num + 4; 
+  // 3 + 3 + (seg_num - 1) * 2 = 2m + 4 fixed始末6+中间点的位置（seg_num - 1) + 中间点的位置连续（seg_num - 1 )
+  num_p = 2 * seg_num - 2; 
+  //(seg_num - 1) * 2 = 2m - 2 free 中间点的个数， 由于微分不确定性v ，a
+  num_d = 6 * seg_num; 
+  //轨迹段数*6个多项式系数
+
   Ct = Eigen::MatrixXd::Zero(num_d, num_f + num_p);
   Ct(0, 0) = 1;
   Ct(2, 1) = 1;
@@ -110,6 +137,7 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
   Eigen::VectorXd Dz1 = C * Dz;
 
   /* ---------- minimum snap matrix ---------- */
+  /*最小化jerk才对*/
   Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(seg_num * 6, seg_num * 6);
 
   for (int k = 0; k < seg_num; k++)
@@ -124,7 +152,7 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
     }
   }
 
-  /* ---------- R matrix ---------- */
+  /* ---------- R matrix --（4m+2）*（4m+2）-------- */
   Eigen::MatrixXd R = C * A.transpose().inverse() * Q * A.inverse() * Ct;
 
   Eigen::VectorXd Dxf(2 * seg_num + 4), Dyf(2 * seg_num + 4), Dzf(2 * seg_num + 4);
@@ -149,15 +177,19 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
   Dxp = -(Rpp.inverse() * Rfp.transpose()) * Dxf;
   Dyp = -(Rpp.inverse() * Rfp.transpose()) * Dyf;
   Dzp = -(Rpp.inverse() * Rfp.transpose()) * Dzf;
-
+  /*将求得的free量带入Dx/y/z 1*/
   Dx1.segment(2 * seg_num + 4, 2 * seg_num - 2) = Dxp;
   Dy1.segment(2 * seg_num + 4, 2 * seg_num - 2) = Dyp;
   Dz1.segment(2 * seg_num + 4, 2 * seg_num - 2) = Dzp;
-
+/*    p = A.inverse()* Dx =
+      A.inverse()* C.transpose().Dx1 
+      */
   Px = (A.inverse() * Ct) * Dx1;
   Py = (A.inverse() * Ct) * Dy1;
   Pz = (A.inverse() * Ct) * Dz1;
 
+
+/*z至此 求出了多项式的轨迹系数 共有4m + 2 个 m表示段数 */
   for (int i = 0; i < seg_num; i++)
   {
     poly_coeff.block(i, 0, 1, 6) = Px.segment(i * 6, 6).transpose();
@@ -167,7 +199,7 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
 
   /* ---------- use polynomials ---------- */
   PolynomialTraj poly_traj;
-  for (int i = 0; i < poly_coeff.rows(); ++i)
+  for (int i = 0; i < poly_coeff.rows(); ++i) //poly_coeff.rows() 代表段数
   {
     vector<double> cx(6), cy(6), cz(6);
     for (int j = 0; j < 6; ++j)
@@ -178,15 +210,19 @@ PolynomialTraj PolynomialTraj::minSnapTraj(const Eigen::MatrixXd &Pos, const Eig
     reverse(cy.begin(), cy.end());
     reverse(cz.begin(), cz.end());
     double ts = Time(i);
-    poly_traj.addSegment(cx, cy, cz, ts);
+    poly_traj.addSegment(cx, cy, cz, ts);//求得的每一段轨迹的系数加入到多项式轨迹之中
   }
 
   return poly_traj;
 }
 
+
+/*-----------------------------------一段minisanp轨迹的生成------------------------------------------------------------------*/
+//就只有一个起点和终点
 PolynomialTraj PolynomialTraj::one_segment_traj_gen(const Eigen::Vector3d &start_pt, const Eigen::Vector3d &start_vel, const Eigen::Vector3d &start_acc,
                                                     const Eigen::Vector3d &end_pt, const Eigen::Vector3d &end_vel, const Eigen::Vector3d &end_acc,
                                                     double t)
+                                    
 {
   Eigen::MatrixXd C = Eigen::MatrixXd::Zero(6, 6), Crow(1, 6);
   Eigen::VectorXd Bx(6), By(6), Bz(6);
@@ -200,11 +236,11 @@ PolynomialTraj PolynomialTraj::one_segment_traj_gen(const Eigen::Vector3d &start
   C.row(4) = Crow;
   Crow << 20 * pow(t, 3), 12 * pow(t, 2), 6 * t, 2, 0, 0;
   C.row(5) = Crow;
-
+//始末位置 速度 加速度
   Bx << start_pt(0), start_vel(0), start_acc(0), end_pt(0), end_vel(0), end_acc(0);
   By << start_pt(1), start_vel(1), start_acc(1), end_pt(1), end_vel(1), end_acc(1);
   Bz << start_pt(2), start_vel(2), start_acc(2), end_pt(2), end_vel(2), end_acc(2);
-
+//cx = B  x为多项式的系数
   Eigen::VectorXd Cofx = C.colPivHouseholderQr().solve(Bx);
   Eigen::VectorXd Cofy = C.colPivHouseholderQr().solve(By);
   Eigen::VectorXd Cofz = C.colPivHouseholderQr().solve(Bz);
@@ -218,7 +254,7 @@ PolynomialTraj PolynomialTraj::one_segment_traj_gen(const Eigen::Vector3d &start
   }
 
   PolynomialTraj poly_traj;
-  poly_traj.addSegment(cx, cy, cz, t);
+  poly_traj.addSegment(cx, cy, cz, t); //将所求的每一段轨迹系数加入到多项式轨迹之中
 
   return poly_traj;
 }

@@ -518,7 +518,7 @@ namespace ego_planner
       //cout << "in=" << in.transpose() << " out=" << out.transpose() << endl;
       Eigen::Vector3d in(init_points.col(segment_ids[i].first)), out(init_points.col(segment_ids[i].second));
       if (a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ 0.1, in, out))
-      {
+      {       //使用A*算法搜索路径
         a_star_pathes.push_back(a_star_->getPath());
       }
       else
